@@ -2,8 +2,8 @@ name: Daily Job Scraper
 
 on:
   schedule:
-    - cron: "0 8 * * *"  # daily at 08:00 UTC
-  workflow_dispatch:
+    - cron: "0 8 * * *"  # Runs daily at 08:00 UTC
+  workflow_dispatch:     # Allows you to run manually anytime
 
 jobs:
   run-scraper:
@@ -15,15 +15,4 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install --upgrade pip && pip install -r requirements.txt
-
-      - name: Run scraper
-        env:
-          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
-          FROM_PASSWORD: ${{ secrets.FROM_PASSWORD }}
-          TO_EMAIL: ${{ secrets.TO_EMAIL }}
-        run: python app/scraper.py
+        w
