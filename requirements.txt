@@ -1,4 +1,4 @@
-jobspy @ git+https://github.com/JasonHinds13/jobspy.git
+jobspy @ git+https://github.com/RashadGarayev/jobspy.git
 pandas
 requests
 beautifulsoup4
