@@ -1,0 +1,7 @@
+jobspy
+pandas
+numpy
+requests
+beautifulsoup4
+lxml
+schedule
