@@ -1,8 +1,0 @@
-services:
-  - type: cron
-    name: job-scraper
-    env: docker
-    dockerfilePath: ./Dockerfile
-    schedule: "0 9 * * *"   # daily at 09:00 UTC (adjust if needed)
-    runtime: docker
-    region: frankfurt
