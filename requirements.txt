@@ -1,4 +1,4 @@
-jobspy @ git+https://github.com/RashadGarayev/jobspy.git
+jobspy==0.31.0
 pandas
 requests
 beautifulsoup4
