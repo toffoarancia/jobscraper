@@ -2,8 +2,12 @@ import csv
 import requests
 from bs4 import BeautifulSoup
 from email_utils import send_email
+import os
 
-def scrape_jobs_indeed(query="software engineer", location="Watford, UK", radius=10):
+# Get search term from environment variable or default to empty string
+SEARCH_TERM = os.getenv("SEARCH_TERM", "")
+
+def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford, UK", radius=10):
     """Scrape Indeed for hybrid & remote jobs with minimum salary ~30k."""
     jobs = []
 
@@ -31,11 +35,9 @@ def scrape_jobs_indeed(query="software engineer", location="Watford, UK", radius
         salary_tag = job.find("span", class_="salary-snippet")
         link_tag = job.find("a", href=True)
 
-        # Skip if missing
         if not title or not link_tag:
             continue
 
-        # Salary filter (~30000)
         salary_text = salary_tag.text.strip() if salary_tag else ""
         if salary_text and ("30,000" not in salary_text and "£" in salary_text):
             continue
@@ -54,7 +56,6 @@ def main():
     jobs = scrape_jobs_indeed()
     print(f"Found {len(jobs)} jobs")
 
-    # Save CSV
     if jobs:
         keys = jobs[0].keys()
         with open("jobs.csv", "w", newline="", encoding="utf-8") as f:
@@ -62,13 +63,17 @@ def main():
             writer.writeheader()
             writer.writerows(jobs)
 
-        # Send email
         send_email(
-            subject="Daily Job Results",
+            subject=f"Daily Job Results for '{SEARCH_TERM or 'Any'}'",
             body=f"{len(jobs)} jobs found today. CSV attached.",
             attachment_path="jobs.csv"
         )
     else:
+        # Send email even if no jobs found
+        send_email(
+            subject=f"Daily Job Results for '{SEARCH_TERM or 'Any'}'",
+            body="No jobs found today matching your criteria.",
+        )
         print("No jobs found today.")
 
 if __name__ == "__main__":
