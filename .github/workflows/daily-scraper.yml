@@ -1,0 +1,31 @@
+name: Daily Job Scraper
+
+on:
+  schedule:
+    - cron: "0 9 * * *"     # Runs every day at 09:00 UTC
+  workflow_dispatch:         # Allow manual runs
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Scraper
+        env:
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          FROM_PASSWORD: ${{ secrets.FROM_PASSWORD }}
+          TO_EMAIL: ${{ secrets.TO_EMAIL }}
+        run: |
+          python app/scraper.py
