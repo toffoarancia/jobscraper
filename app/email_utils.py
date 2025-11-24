@@ -1,11 +1,13 @@
+import os
 import smtplib
 from email.message import EmailMessage
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-FROM_EMAIL = "alessandro.salvetti86@gmail.com"
-FROM_PASSWORD = "60Toffo60!"  # IMPORTANT: must be an App Password
-TO_EMAIL = "alessandro.salvetti86@gmail.com"
+
+FROM_EMAIL = os.getenv("FROM_EMAIL")
+FROM_PASSWORD = os.getenv("FROM_PASSWORD")
+TO_EMAIL = os.getenv("TO_EMAIL")
 
 def send_email(subject, body, attachment_path=None):
     msg = EmailMessage()
