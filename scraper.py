@@ -1,10 +1,7 @@
 import csv
+import os
 from jobspy import scrape_jobs
 from email_utils import send_email
-
-# Filters:
-# - Hybrid roles within 10 miles of Watford (UK)
-# - Remote roles paying >= £30,000
 
 def main():
     jobs = scrape_jobs(
@@ -13,7 +10,7 @@ def main():
         location="Watford, United Kingdom",
         linkedin_fetch_description=True,
         radius_miles=10,
-        is_remote=True,  # also fetch remote jobs
+        is_remote=True,
         min_salary=30000,
         results_wanted=50,
         hours_old=24,
@@ -21,12 +18,10 @@ def main():
     )
 
     print(f"Found {len(jobs)} jobs")
+
     jobs.to_csv("jobs.csv", quoting=csv.QUOTE_NONNUMERIC, escapechar="\\", index=False)
 
-    if len(jobs) == 0:
-        body = "No new hybrid/remote jobs found today."
-    else:
-        body = f"{len(jobs)} jobs found. CSV attached."
+    body = f"{len(jobs)} jobs found today. CSV file attached."
 
     send_email(
         subject="Daily Job Results",
