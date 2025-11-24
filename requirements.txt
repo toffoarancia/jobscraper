@@ -1,6 +1,5 @@
-jobspy
+jobspy @ git+https://github.com/JasonHinds13/jobspy.git
 pandas
-numpy
 requests
 beautifulsoup4
 lxml
