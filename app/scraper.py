@@ -6,7 +6,7 @@ def main():
     # Scrape hybrid/remote jobs
     jobs = scrape_jobs(
         site_name=["indeed", "linkedin", "zip_recruiter", "google"],
-        search_term="software engineer",
+        search_term=" ",
         location="Watford, United Kingdom",
         linkedin_fetch_description=True,
         radius_miles=10,
