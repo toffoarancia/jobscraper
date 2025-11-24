@@ -29,4 +29,4 @@ jobs:
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           FROM_PASSWORD: ${{ secrets.FROM_PASSWORD }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
-        run: python app/scraper.py
+        run: python jobsearch/app/scraper.py
