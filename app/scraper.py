@@ -4,8 +4,12 @@ from bs4 import BeautifulSoup
 from email_utils import send_email
 import os
 
-# Get search term from environment variable or default to empty string
-SEARCH_TERM = os.getenv("SEARCH_TERM", "")
+# Get search term from environment variable
+SEARCH_TERM = os.getenv("SEARCH_TERM", "").strip()
+
+# Treat "ALL" or empty string as searching for any job
+if SEARCH_TERM.upper() == "ALL" or SEARCH_TERM == "":
+    SEARCH_TERM = ""  # Indeed interprets empty query as all jobs
 
 def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford, UK", radius=10):
     """Scrape Indeed for hybrid & remote jobs with minimum salary ~30k."""
@@ -64,15 +68,14 @@ def main():
             writer.writerows(jobs)
 
         send_email(
-            subject=f"Daily Job Results for '{SEARCH_TERM or 'Any'}'",
+            subject=f"Daily Job Results for '{SEARCH_TERM or 'ALL'}'",
             body=f"{len(jobs)} jobs found today. CSV attached.",
             attachment_path="jobs.csv"
         )
     else:
-        # Send email even if no jobs found
         send_email(
-            subject=f"Daily Job Results for '{SEARCH_TERM or 'Any'}'",
-            body="No jobs found today matching your criteria.",
+            subject=f"Daily Job Results for '{SEARCH_TERM or 'ALL'}'",
+            body="No jobs found today matching your criteria."
         )
         print("No jobs found today.")
 
