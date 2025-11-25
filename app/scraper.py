@@ -3,11 +3,18 @@ import requests
 from bs4 import BeautifulSoup
 from email_utils import send_email
 import os
+import urllib3
 
-# Keywords to match
+# -------------------------------------------------------
+# Disable SSL warnings (for CV-Library)
+# -------------------------------------------------------
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# -------------------------------------------------------
+# Configuration
+# -------------------------------------------------------
 KEYWORDS = ["customer", "it", "administrator"]
 
-# Get search term from environment variable
 SEARCH_TERM = os.getenv("SEARCH_TERM", "").strip()
 if SEARCH_TERM.upper() == "ALL" or SEARCH_TERM == "":
     SEARCH_TERM = ""
@@ -17,9 +24,8 @@ HEADERS = {
 }
 
 # -------------------------------------------------------
-# Helpers
+# Helper functions
 # -------------------------------------------------------
-
 def matches_keywords(text):
     text = text.lower()
     return any(k in text for k in KEYWORDS)
@@ -31,27 +37,19 @@ def meets_salary(salary_text):
     numbers = [int(s) for s in salary_text.split() if s.isdigit()]
     return any(n >= 30000 for n in numbers)
 
-
 # -------------------------------------------------------
-# INDEED SCRAPER
+# Indeed Scraper
 # -------------------------------------------------------
-
 def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford", radius=10):
     jobs = []
 
-    base_url = "https://www.indeed.co.uk/jobs"
-    params = {
-        "q": query,
-        "l": location,
-        "radius": radius,
-        "fromage": "1",
-    }
+    url = "https://www.indeed.co.uk/jobs"
+    params = {"q": query, "l": location, "radius": radius, "fromage": "1"}
 
-    r = requests.get(base_url, params=params, headers=HEADERS)
+    r = requests.get(url, headers=HEADERS, params=params)
     soup = BeautifulSoup(r.text, "html.parser")
 
     results = soup.find_all("div", class_="job_seen_beacon")
-
     for job in results:
         title_tag = job.find("h2", class_="jobTitle")
         company_tag = job.find("span", class_="companyName")
@@ -63,7 +61,6 @@ def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford", radius=10):
             continue
 
         title = title_tag.text.strip()
-
         if not matches_keywords(title):
             continue
 
@@ -83,27 +80,22 @@ def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford", radius=10):
             "salary": salary_text,
             "url": "https://www.indeed.co.uk" + link_tag["href"]
         })
-
     return jobs
 
-
 # -------------------------------------------------------
-# REED SCRAPER
+# Reed Scraper
 # -------------------------------------------------------
-
 def scrape_jobs_reed(query=SEARCH_TERM):
     jobs = []
 
     url = (
-        "https://www.reed.co.uk/jobs"
-        f"?keywords={query}&location=Watford&proximity=10&datecreatedoffset=1"
+        f"https://www.reed.co.uk/jobs?keywords={query}"
+        "&location=Watford&proximity=10&datecreatedoffset=1"
     )
-
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
 
     results = soup.find_all("article", class_="job-result")
-
     for job in results:
         title_tag = job.find("h3")
         link_tag = title_tag.find("a") if title_tag else None
@@ -134,25 +126,22 @@ def scrape_jobs_reed(query=SEARCH_TERM):
             "salary": salary_text,
             "url": "https://www.reed.co.uk" + link_tag["href"]
         })
-
     return jobs
 
-
 # -------------------------------------------------------
-# CV-LIBRARY SCRAPER
+# CV-Library Scraper (SSL verification disabled)
 # -------------------------------------------------------
-
 def scrape_jobs_cvlibrary(query=SEARCH_TERM):
     jobs = []
 
-    url = (
-        "https://www.cv-library.co.uk/search-jobs"
-        f"?distance=10&keywords={query}&location=Watford"
-    )
+    url = f"https://www.cv-library.co.uk/search-jobs?distance=10&keywords={query}&location=Watford"
+    try:
+        r = requests.get(url, headers=HEADERS, verify=False, timeout=20)
+    except Exception as e:
+        print("CV-Library request failed:", e)
+        return []
 
-    r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
-
     results = soup.find_all("article", class_="job")
 
     for job in results:
@@ -185,14 +174,11 @@ def scrape_jobs_cvlibrary(query=SEARCH_TERM):
             "salary": salary_text,
             "url": "https://www.cv-library.co.uk" + link_tag["href"]
         })
-
     return jobs
 
-
 # -------------------------------------------------------
-# MAIN
+# Main Function
 # -------------------------------------------------------
-
 def main():
     all_jobs = []
 
@@ -219,7 +205,6 @@ def main():
             body=f"{len(all_jobs)} jobs found today. CSV attached.",
             attachment_path="jobs.csv",
         )
-
     else:
         send_email(
             subject=f"Daily Job Results for '{SEARCH_TERM or 'ALL'}'",
@@ -227,6 +212,6 @@ def main():
         )
         print("No jobs found today.")
 
-
+# -------------------------------------------------------
 if __name__ == "__main__":
     main()
