@@ -1,2 +1,5 @@
 requests
 beautifulsoup4
+csv
+asyncio
+aiohttp
