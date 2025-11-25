@@ -2,7 +2,6 @@ import csv
 import requests
 from bs4 import BeautifulSoup
 from email_utils import send_email
-import os
 import urllib3
 
 # -------------------------------------------------------
@@ -11,13 +10,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -------------------------------------------------------
-# Configuration
+# Keywords only
 # -------------------------------------------------------
 KEYWORDS = ["customer", "it", "administrator"]
-
-SEARCH_TERM = os.getenv("SEARCH_TERM", "").strip()
-if SEARCH_TERM.upper() == "ALL" or SEARCH_TERM == "":
-    SEARCH_TERM = ""
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -40,11 +35,12 @@ def meets_salary(salary_text):
 # -------------------------------------------------------
 # Indeed Scraper
 # -------------------------------------------------------
-def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford", radius=10):
+def scrape_jobs_indeed():
     jobs = []
 
     url = "https://www.indeed.co.uk/jobs"
-    params = {"q": query, "l": location, "radius": radius, "fromage": "1"}
+    # Search query empty, filters via keywords
+    params = {"q": "", "l": "Watford", "radius": 10, "fromage": "1"}
 
     r = requests.get(url, headers=HEADERS, params=params)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -85,12 +81,12 @@ def scrape_jobs_indeed(query=SEARCH_TERM, location="Watford", radius=10):
 # -------------------------------------------------------
 # Reed Scraper
 # -------------------------------------------------------
-def scrape_jobs_reed(query=SEARCH_TERM):
+def scrape_jobs_reed():
     jobs = []
 
     url = (
-        f"https://www.reed.co.uk/jobs?keywords={query}"
-        "&location=Watford&proximity=10&datecreatedoffset=1"
+        "https://www.reed.co.uk/jobs?"
+        "keywords=&location=Watford&proximity=10&datecreatedoffset=1"
     )
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -131,10 +127,10 @@ def scrape_jobs_reed(query=SEARCH_TERM):
 # -------------------------------------------------------
 # CV-Library Scraper (SSL verification disabled)
 # -------------------------------------------------------
-def scrape_jobs_cvlibrary(query=SEARCH_TERM):
+def scrape_jobs_cvlibrary():
     jobs = []
 
-    url = f"https://www.cv-library.co.uk/search-jobs?distance=10&keywords={query}&location=Watford"
+    url = "https://www.cv-library.co.uk/search-jobs?distance=10&keywords=&location=Watford"
     try:
         r = requests.get(url, headers=HEADERS, verify=False, timeout=20)
     except Exception as e:
@@ -201,17 +197,15 @@ def main():
             writer.writerows(all_jobs)
 
         send_email(
-            subject=f"Daily Job Results for '{SEARCH_TERM or 'ALL'}'",
+            subject="Daily Job Results for Customer / IT / Administrator",
             body=f"{len(all_jobs)} jobs found today. CSV attached.",
             attachment_path="jobs.csv",
         )
     else:
         send_email(
-            subject=f"Daily Job Results for '{SEARCH_TERM or 'ALL'}'",
+            subject="Daily Job Results for Customer / IT / Administrator",
             body="No jobs found today matching your criteria.",
         )
         print("No jobs found today.")
 
-# -------------------------------------------------------
-if __name__ == "__main__":
-    main()
+#
