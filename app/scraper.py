@@ -1,5 +1,6 @@
 import csv
-import requests
+import asyncio
+import aiohttp
 from bs4 import BeautifulSoup
 from email_utils import send_email
 import urllib3
@@ -10,9 +11,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -------------------------------------------------------
-# Keywords only
+# Keywords
 # -------------------------------------------------------
-KEYWORDS = ["customer", "it", "administrator"]
+KEYWORDS = ["Customer", "IT", "Administrator"]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -21,10 +22,6 @@ HEADERS = {
 # -------------------------------------------------------
 # Helper functions
 # -------------------------------------------------------
-def matches_keywords(text):
-    text = text.lower()
-    return any(k in text for k in KEYWORDS)
-
 def meets_salary(salary_text):
     if not salary_text:
         return False
@@ -32,20 +29,36 @@ def meets_salary(salary_text):
     numbers = [int(s) for s in salary_text.split() if s.isdigit()]
     return any(n >= 30000 for n in numbers)
 
+def is_remote(location_text):
+    if not location_text:
+        return False
+    location_text = location_text.lower()
+    return "remote" in location_text or "hybrid" in location_text
+
 # -------------------------------------------------------
-# Indeed Scraper
+# Async request helper
 # -------------------------------------------------------
-def scrape_jobs_indeed():
+async def fetch(session, url, ssl_verify=True):
+    try:
+        async with session.get(url, ssl=ssl_verify, timeout=20) as response:
+            return await response.text()
+    except Exception as e:
+        print(f"Request failed for {url}: {e}")
+        return ""
+
+# -------------------------------------------------------
+# Scrapers
+# -------------------------------------------------------
+async def scrape_jobs_indeed(session):
     jobs = []
-
+    query = "Customer OR IT OR Administrator"
     url = "https://www.indeed.co.uk/jobs"
-    # Search query empty, filters via keywords
-    params = {"q": "", "l": "Watford", "radius": 10, "fromage": "1"}
+    params = {"q": query, "l": "Watford", "radius": 10, "fromage": "1"}
 
-    r = requests.get(url, headers=HEADERS, params=params)
-    soup = BeautifulSoup(r.text, "html.parser")
-
+    text = await fetch(session, url + "?" + "&".join(f"{k}={v}" for k, v in params.items()))
+    soup = BeautifulSoup(text, "html.parser")
     results = soup.find_all("div", class_="job_seen_beacon")
+
     for job in results:
         title_tag = job.find("h2", class_="jobTitle")
         company_tag = job.find("span", class_="companyName")
@@ -56,21 +69,17 @@ def scrape_jobs_indeed():
         if not title_tag or not link_tag:
             continue
 
-        title = title_tag.text.strip()
-        if not matches_keywords(title):
-            continue
-
         salary_text = salary_tag.text.strip() if salary_tag else ""
         if salary_text and not meets_salary(salary_text):
             continue
 
-        loc_text = location_tag.text.lower() if location_tag else ""
-        if not any(x in loc_text for x in ["remote", "hybrid"]):
+        loc_text = location_tag.text if location_tag else ""
+        if not is_remote(loc_text):
             continue
 
         jobs.append({
             "site": "Indeed",
-            "title": title,
+            "title": title_tag.text.strip(),
             "company": company_tag.text.strip() if company_tag else "",
             "location": loc_text,
             "salary": salary_text,
@@ -78,20 +87,15 @@ def scrape_jobs_indeed():
         })
     return jobs
 
-# -------------------------------------------------------
-# Reed Scraper
-# -------------------------------------------------------
-def scrape_jobs_reed():
+async def scrape_jobs_reed(session):
     jobs = []
+    query = "Customer OR IT OR Administrator"
+    url = f"https://www.reed.co.uk/jobs?keywords={query}&location=Watford&proximity=10&datecreatedoffset=1"
 
-    url = (
-        "https://www.reed.co.uk/jobs?"
-        "keywords=&location=Watford&proximity=10&datecreatedoffset=1"
-    )
-    r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
-
+    text = await fetch(session, url)
+    soup = BeautifulSoup(text, "html.parser")
     results = soup.find_all("article", class_="job-result")
+
     for job in results:
         title_tag = job.find("h3")
         link_tag = title_tag.find("a") if title_tag else None
@@ -102,21 +106,17 @@ def scrape_jobs_reed():
         if not title_tag or not link_tag:
             continue
 
-        title = title_tag.text.strip()
-        if not matches_keywords(title):
-            continue
-
         salary_text = salary_tag.text.strip() if salary_tag else ""
         if salary_text and not meets_salary(salary_text):
             continue
 
-        loc_text = location_tag.text.lower() if location_tag else ""
-        if not any(x in loc_text for x in ["remote", "hybrid"]):
+        loc_text = location_tag.text if location_tag else ""
+        if not is_remote(loc_text):
             continue
 
         jobs.append({
             "site": "Reed",
-            "title": title,
+            "title": title_tag.text.strip(),
             "company": company_tag.text.strip() if company_tag else "",
             "location": loc_text,
             "salary": salary_text,
@@ -124,20 +124,13 @@ def scrape_jobs_reed():
         })
     return jobs
 
-# -------------------------------------------------------
-# CV-Library Scraper (SSL verification disabled)
-# -------------------------------------------------------
-def scrape_jobs_cvlibrary():
+async def scrape_jobs_cvlibrary(session):
     jobs = []
+    query = "Customer+OR+IT+OR+Administrator"
+    url = f"https://www.cv-library.co.uk/search-jobs?distance=10&keywords={query}&location=Watford"
 
-    url = "https://www.cv-library.co.uk/search-jobs?distance=10&keywords=&location=Watford"
-    try:
-        r = requests.get(url, headers=HEADERS, verify=False, timeout=20)
-    except Exception as e:
-        print("CV-Library request failed:", e)
-        return []
-
-    soup = BeautifulSoup(r.text, "html.parser")
+    text = await fetch(session, url, ssl_verify=False)
+    soup = BeautifulSoup(text, "html.parser")
     results = soup.find_all("article", class_="job")
 
     for job in results:
@@ -150,21 +143,17 @@ def scrape_jobs_cvlibrary():
         if not title_tag or not link_tag:
             continue
 
-        title = title_tag.text.strip()
-        if not matches_keywords(title):
-            continue
-
         salary_text = salary_tag.text.strip() if salary_tag else ""
         if salary_text and not meets_salary(salary_text):
             continue
 
-        loc_text = location_tag.text.lower() if location_tag else ""
-        if not any(x in loc_text for x in ["remote", "hybrid"]):
+        loc_text = location_tag.text if location_tag else ""
+        if not is_remote(loc_text):
             continue
 
         jobs.append({
             "site": "CV-Library",
-            "title": title,
+            "title": title_tag.text.strip(),
             "company": company_tag.text.strip() if company_tag else "",
             "location": loc_text,
             "salary": salary_text,
@@ -173,39 +162,38 @@ def scrape_jobs_cvlibrary():
     return jobs
 
 # -------------------------------------------------------
-# Main Function
+# Main async
 # -------------------------------------------------------
-def main():
-    all_jobs = []
+async def main():
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        indeed_task = scrape_jobs_indeed(session)
+        reed_task = scrape_jobs_reed(session)
+        cv_task = scrape_jobs_cvlibrary(session)
 
-    print("Scraping Indeed...")
-    all_jobs.extend(scrape_jobs_indeed())
-
-    print("Scraping Reed...")
-    all_jobs.extend(scrape_jobs_reed())
-
-    print("Scraping CV-Library...")
-    all_jobs.extend(scrape_jobs_cvlibrary())
+        results = await asyncio.gather(indeed_task, reed_task, cv_task)
+        all_jobs = [job for sublist in results for job in sublist]
 
     print(f"Total jobs found: {len(all_jobs)}")
 
     if all_jobs:
-        keys = all_jobs[0].keys()
+        keys = ["site", "title", "company", "location", "salary", "url"]
         with open("jobs.csv", "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, keys, quoting=csv.QUOTE_NONNUMERIC)
             writer.writeheader()
             writer.writerows(all_jobs)
 
         send_email(
-            subject="Daily Job Results for Customer / IT / Administrator",
+            subject="Daily Job Results: Customer / IT / Administrator",
             body=f"{len(all_jobs)} jobs found today. CSV attached.",
             attachment_path="jobs.csv",
         )
     else:
         send_email(
-            subject="Daily Job Results for Customer / IT / Administrator",
+            subject="Daily Job Results: Customer / IT / Administrator",
             body="No jobs found today matching your criteria.",
         )
         print("No jobs found today.")
 
-#
+# -------------------------------------------------------
+if __name__ == "__main__":
+    asyncio.run(main())
