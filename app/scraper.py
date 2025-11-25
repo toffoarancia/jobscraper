@@ -1,164 +1,108 @@
-# app/scraper.py — diagnostic + robust runner
-import sys
 import os
-import traceback
+import sys
 import time
 import csv
+import traceback
 
-# Make logs flush immediately so Actions shows them live
-def log(*parts):
-    print(*parts, flush=True)
+# Ensure "app" folder is importable when running in GitHub Actions
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(BASE)
 
-log("=== START scraper.py ===")
-log("Python:", sys.version.replace("\n", " "))
-log("CWD:", os.getcwd())
-log("Listing project files (top-level):")
-for p in sorted(os.listdir(".")):
-    log(" -", p)
-
-# Try to import send_email and scrapers; capture errors and show stack traces
-send_email = None
-scrape_indeed = None
-scrape_reed = None
-scrape_cvlibrary = None
-
-try:
-    # import email util
-    from email_utils import send_email as _send_email
-    send_email = _send_email
-    log("Imported email_utils.send_email OK")
-except Exception:
-    log("Failed to import email_utils.send_email:")
-    traceback.print_exc()
-
-# Attempt to import site scrapers (these modules should exist in app/)
-try:
-    # these modules are expected to be in the same package / folder (app/)
-    from indeed_scraper import scrape_indeed as _indeed
-    scrape_indeed = _indeed
-    log("Imported indeed_scraper.scrape_indeed OK")
-except Exception:
-    log("Failed to import indeed_scraper.scrape_indeed:")
-    traceback.print_exc()
-
-try:
-    from reed_scraper import scrape_reed as _reed
-    scrape_reed = _reed
-    log("Imported reed_scraper.scrape_reed OK")
-except Exception:
-    log("Failed to import reed_scraper.scrape_reed:")
-    traceback.print_exc()
-
-try:
-    from cvlibrary_scraper import scrape_cvlibrary as _cv
-    scrape_cvlibrary = _cv
-    log("Imported cvlibrary_scraper.scrape_cvlibrary OK")
-except Exception:
-    log("Failed to import cvlibrary_scraper.scrape_cvlibrary:")
-    traceback.print_exc()
-
-# Provide a simple fallback scraper in case imports missing
-def fallback_scraper(keyword, site_name):
-    log(f"[fallback] Simulating {site_name} search for '{keyword}' — returning 0 results")
-    return []
+from email_utils import send_email
+from indeed_scraper import scrape_indeed
+from reed_scraper import scrape_reed
+from cvlibrary_scraper import scrape_cvlibrary
 
 KEYWORDS = ["Customer", "IT", "Administrator"]
 
-def run_all():
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def scrape_all():
     all_jobs = []
-    log("\n===== Scraping started =====\n")
+
+    log("\n===== Job Scraper Started =====\n")
+
     for kw in KEYWORDS:
-        log(f"--- Keyword: {kw} ---")
-        # indeed
+        log(f"\n🔍 Searching for keyword: {kw}")
+
+        # --- Indeed ---
         try:
-            fn = scrape_indeed or (lambda k: fallback_scraper(k, "Indeed"))
-            res = fn(kw)
-            log(f"Indeed results for '{kw}': {len(res)}")
-            all_jobs.extend(res or [])
-        except Exception:
-            log("Error scraping Indeed for", kw)
+            indeed = scrape_indeed(kw)
+            log(f"Indeed returned {len(indeed)} jobs.")
+            all_jobs.extend(indeed)
+        except Exception as e:
+            log(f"❌ ERROR scraping Indeed for '{kw}': {e}")
             traceback.print_exc()
 
-        # reed
+        # --- Reed ---
         try:
-            fn = scrape_reed or (lambda k: fallback_scraper(k, "Reed"))
-            res = fn(kw)
-            log(f"Reed results for '{kw}': {len(res)}")
-            all_jobs.extend(res or [])
-        except Exception:
-            log("Error scraping Reed for", kw)
+            reed = scrape_reed(kw)
+            log(f"Reed returned {len(reed)} jobs.")
+            all_jobs.extend(reed)
+        except Exception as e:
+            log(f"❌ ERROR scraping Reed for '{kw}': {e}")
             traceback.print_exc()
 
-        # cv-library
+        # --- CV Library ---
         try:
-            fn = scrape_cvlibrary or (lambda k: fallback_scraper(k, "CV-Library"))
-            res = fn(kw)
-            log(f"CV-Library results for '{kw}': {len(res)}")
-            all_jobs.extend(res or [])
-        except Exception:
-            log("Error scraping CV-Library for", kw)
+            cv = scrape_cvlibrary(kw)
+            log(f"CV-Library returned {len(cv)} jobs.")
+            all_jobs.extend(cv)
+        except Exception as e:
+            log(f"❌ ERROR scraping CV-Library for '{kw}': {e}")
             traceback.print_exc()
 
-        time.sleep(1)  # small pause between keywords
+        # Avoid rate limiting
+        time.sleep(1)
 
-    log("\n===== Scraping finished =====")
-    log("Total jobs found:", len(all_jobs))
+    log(f"\n===== TOTAL JOBS COLLECTED: {len(all_jobs)} =====")
     return all_jobs
 
-def save_csv(jobs, filename="jobs.csv"):
-    keys = ["site", "title", "company", "location", "salary", "url"]
+
+def save_csv(jobs):
+    """Save results to jobs.csv"""
+    if not jobs:
+        log("⚠ No jobs found — skipping CSV save.")
+        return None
+
+    filename = "jobs.csv"
+    keys = jobs[0].keys()
+
     try:
         with open(filename, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, keys, quoting=csv.QUOTE_NONNUMERIC)
+            writer = csv.DictWriter(f, keys)
             writer.writeheader()
-            for j in jobs:
-                # write only expected keys; missing keys become empty
-                row = {k: j.get(k, "") for k in keys}
-                writer.writerow(row)
-        log("Saved CSV:", filename)
+            writer.writerows(jobs)
+
+        log(f"📄 Saved CSV: {filename}")
         return filename
-    except Exception:
-        log("Failed to save CSV:")
+
+    except Exception as e:
+        log(f"❌ Error saving CSV: {e}")
         traceback.print_exc()
         return None
 
-def ensure_send_email_available():
-    global send_email
-    if send_email is None:
-        # create a debug send_email that just logs
-        def debug_send_email(subject, body, attachment_path=None):
-            log("[debug send_email] SUBJECT:", subject)
-            log("[debug send_email] BODY:", body)
-            log("[debug send_email] ATTACHMENT:", attachment_path)
-            return True
-        send_email = debug_send_email
-        log("Using debug send_email (original import missing)")
 
 def main():
-    ensure_send_email_available()
-    jobs = run_all()
-    csv_file = save_csv(jobs) if jobs else None
+    jobs = scrape_all()
+    csv_path = save_csv(jobs)
 
-    # Compose subject/body
-    subject = "Daily Job Results: Customer / IT / Administrator"
-    body = f"{len(jobs)} jobs found."
+    log("\n📧 Sending email...")
 
-    log("About to call send_email(...)")
     try:
-        send_email(subject, body, csv_file)
-        log("send_email() completed")
-    except Exception:
-        log("send_email() raised exception:")
+        send_email(
+            subject="Daily Job Results",
+            body=f"{len(jobs)} job(s) found.\nSee attached CSV.",
+            attachment_path=csv_path
+        )
+        log("✅ Email sent successfully!")
+    except Exception as e:
+        log(f"❌ Email sending failed: {e}")
         traceback.print_exc()
-        # don't re-raise: we still want workflow to finish and logs to show
+
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        log("Unhandled exception in main():")
-        traceback.print_exc()
-        # exit non-zero to mark failure
-        sys.exit(1)
-    finally:
-        log("=== END scraper.py ===")
+    main()
